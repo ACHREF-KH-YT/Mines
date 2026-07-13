@@ -1,0 +1,6 @@
+{
+  "name": "Mines",
+  "description": "A high-fidelity replica of the Stake Mines game with smooth animations, custom synthesized sound effects and music, volume controls, a video gameplay recorder, and advanced stats.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

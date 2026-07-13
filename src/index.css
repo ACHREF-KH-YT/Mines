@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-cyan: #00ffcc;
+  --color-brand-pink: #ff0055;
+  --color-brand-bg: #05060b;
+}
+
+.glass {
+  background: rgba(26, 27, 46, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.neon-glow {
+  text-shadow: 0 0 10px rgba(0, 255, 204, 0.6);
+}
+
+.neon-glow-pink {
+  text-shadow: 0 0 10px rgba(255, 0, 85, 0.6);
+}
+
+.recording-pulse {
+  width: 12px;
+  height: 12px;
+  background: #ff0055;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #ff0055;
+}
+
+/* Custom Styled Range Sliders */
+input[type=range] {
+  -webkit-appearance: none;
+  background: #16172b;
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: #00ffcc;
+  cursor: pointer;
+  border: 2px solid #05060b;
+  box-shadow: 0 0 8px rgba(0, 255, 204, 0.6);
+  transition: transform 0.1s ease;
+}
+
+input[type=range]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
