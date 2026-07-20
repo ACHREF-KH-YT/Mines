@@ -69,6 +69,25 @@ export default function App() {
   const streamRef = useRef<MediaStream | null>(null);
   const recordingTimerRef = useRef<any>(null);
 
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const bgImageRef = useRef<HTMLImageElement | null>(null);
+
+  // Pre-load custom background image for canvas recording to prevent visual flashing
+  useEffect(() => {
+    if (customBgImage) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = customBgImage;
+      img.onload = () => {
+        bgImageRef.current = img;
+      };
+    } else {
+      bgImageRef.current = null;
+    }
+  }, [customBgImage]);
+
+
+
   // Sync volume on changes
   useEffect(() => {
     audioEngine.setSFXVolume(sfxVolume);
@@ -113,22 +132,21 @@ export default function App() {
     audioEngine.init();
 
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        throw new Error("Display recording is not fully supported in this browser. Try Chrome/Firefox/Edge.");
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        throw new Error("Recording canvas is not available.");
       }
 
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { displaySurface: "browser" },
-        audio: true
-      });
-
-      const videoTracks = screenStream.getVideoTracks();
+      // 1. Capture stream from the high-fidelity offscreen canvas at 30 FPS
+      const canvasStream = (canvas as any).captureStream(30);
+      const videoTracks = canvasStream.getVideoTracks();
       if (videoTracks.length === 0) {
-        throw new Error("No video track detected.");
+        throw new Error("No video track captured from the game board.");
       }
 
+      // 2. Combine with the game's synthesized interactive audio stream
       const gameAudioStream = audioEngine.getAudioStream();
-      let combinedStream = screenStream;
+      let combinedStream = canvasStream;
 
       if (gameAudioStream) {
         const audioTracks = gameAudioStream.getAudioTracks();
@@ -140,14 +158,15 @@ export default function App() {
         }
       }
 
-      streamRef.current = screenStream;
+      streamRef.current = combinedStream;
 
+      // 3. Initialize MediaRecorder on the combined stream
       const options = { mimeType: "video/webm;codecs=vp9,opus" };
       let mediaRecorder: MediaRecorder;
       try {
         mediaRecorder = new MediaRecorder(combinedStream, options);
       } catch (e) {
-        mediaRecorder = new MediaRecorder(combinedStream);
+        mediaRecorder = new MediaRecorder(combinedStream); // Fallback
       }
 
       mediaRecorderRef.current = mediaRecorder;
@@ -166,20 +185,18 @@ export default function App() {
         setIsRecording(false);
         setRecordDuration(0);
 
-        screenStream.getTracks().forEach((track) => track.stop());
+        // Stop all tracks to release hardware or memory references
+        combinedStream.getTracks().forEach((track) => track.stop());
       };
 
+      // Start recording and write every 1000ms
       mediaRecorder.start(1000);
       setIsRecording(true);
       setRecordDuration(0);
 
     } catch (err: any) {
-      console.error("Screen recording failed", err);
-      if (err.name === "NotAllowedError" || err.message?.includes("Permission denied")) {
-        setRecordingError("Recording permission was denied. If in iframe, please open the app in a new tab!");
-      } else {
-        setRecordingError(err.message || "Could not start video recording.");
-      }
+      console.error("Canvas recording failed", err);
+      setRecordingError(err.message || "Could not start game recording.");
       setIsRecording(false);
     }
   };
@@ -267,6 +284,279 @@ export default function App() {
   const multiplierSteps = useMemo(() => {
     return getMultiplierSteps(minesCount, HOUSE_EDGE);
   }, [minesCount]);
+
+  // Render loop to draw the custom high-fidelity game board to canvas when recording is active
+  useEffect(() => {
+    if (!isRecording) return;
+
+    let animationFrameId: number;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const render = () => {
+      // 1. Clear background & draw radial space gradient
+      ctx.fillStyle = "#090a10";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const grad = ctx.createRadialGradient(
+        canvas.width / 2,
+        canvas.height / 2,
+        50,
+        canvas.width / 2,
+        canvas.height / 2,
+        canvas.width
+      );
+      grad.addColorStop(0, "#191a2e");
+      grad.addColorStop(1, "#07080e");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw loaded custom background image if available
+      if (bgImageRef.current) {
+        ctx.globalAlpha = 0.25;
+        ctx.drawImage(bgImageRef.current, 0, 0, canvas.width, canvas.height);
+        ctx.globalAlpha = 1.0;
+      }
+
+      // 2. Draw modern grid accents (background graph paper design)
+      ctx.strokeStyle = "rgba(0, 255, 204, 0.04)";
+      ctx.lineWidth = 1;
+      for (let i = 20; i < canvas.width; i += 40) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, canvas.height);
+        ctx.stroke();
+      }
+      for (let j = 20; j < canvas.height; j += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, j);
+        ctx.lineTo(canvas.width, j);
+        ctx.stroke();
+      }
+
+      // 3. Draw Premium Header Text with glows
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = "#00ffcc";
+      ctx.fillStyle = "#00ffcc";
+      ctx.font = "bold 16px system-ui, -apple-system, sans-serif";
+      ctx.fillText("💎 MINES LIVE REPLAY", 30, 42);
+
+      // Status Badge (Playing, Lost, Cashed out)
+      ctx.shadowBlur = 0;
+      let statusColor = "#a855f7"; // purple for playing
+      let statusText = "PLAYING";
+      if (gameStatus === "lost") {
+        statusColor = "#ff0055";
+        statusText = "BOOM! (LOST)";
+      } else if (gameStatus === "cashed-out") {
+        statusColor = "#10b981";
+        statusText = "CASHED OUT";
+      } else if (gameStatus === "idle") {
+        statusColor = "#9ca3af";
+        statusText = "STANDBY";
+      }
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.04)";
+      ctx.beginPath();
+      ctx.roundRect(canvas.width - 165, 23, 135, 26, 6);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+      ctx.stroke();
+
+      ctx.fillStyle = statusColor;
+      ctx.beginPath();
+      ctx.arc(canvas.width - 150, 36, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 10px monospace";
+      ctx.fillText(statusText, canvas.width - 138, 39);
+
+      // Header Separator Line
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
+      ctx.beginPath();
+      ctx.moveTo(25, 60);
+      ctx.lineTo(canvas.width - 25, 60);
+      ctx.stroke();
+
+      // Grid Layout Constants
+      const cellSize = 72;
+      const gap = 10;
+      const gridYStart = 180;
+
+      // 4. Draw 5x5 Mines cells
+      for (let row = 0; row < 5; row++) {
+        for (let col = 0; col < 5; col++) {
+          const idx = row * 5 + col;
+          const cell = cells[idx];
+          if (!cell) continue;
+
+          const x = 25 + col * (cellSize + gap);
+          const y = gridYStart + row * (cellSize + gap);
+
+          const isRevealed = cell.isFlipped;
+          const isGem = cell.state === "gem" || cell.state === "revealed-gem";
+          const isMine = cell.state === "mine" || cell.state === "revealed-mine";
+          const isExploded = cell.state === "revealed-mine-exploded";
+          const isReplayingNext = highlightedIndices?.includes(cell.id);
+
+          ctx.shadowBlur = 0;
+
+          if (isRevealed) {
+            if (isGem) {
+              // Emerald/Cyan Gradient
+              const cellGrad = ctx.createLinearGradient(x, y, x + cellSize, y + cellSize);
+              cellGrad.addColorStop(0, "rgba(0, 255, 204, 0.22)");
+              cellGrad.addColorStop(1, "rgba(16, 185, 129, 0.12)");
+              ctx.fillStyle = cellGrad;
+              ctx.beginPath();
+              ctx.roundRect(x, y, cellSize, cellSize, 14);
+              ctx.fill();
+              ctx.strokeStyle = "#00ffcc";
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+
+              // Drawing a beautiful neon Diamond shape
+              ctx.shadowBlur = 8;
+              ctx.shadowColor = "#00ffcc";
+              ctx.fillStyle = "#00ffcc";
+              ctx.beginPath();
+              ctx.moveTo(x + cellSize / 2, y + 20);
+              ctx.lineTo(x + cellSize - 20, y + cellSize / 2);
+              ctx.lineTo(x + cellSize / 2, y + cellSize - 20);
+              ctx.lineTo(x + 20, y + cellSize / 2);
+              ctx.closePath();
+              ctx.fill();
+
+              // Inside diamond glow accent
+              ctx.shadowBlur = 0;
+              ctx.strokeStyle = "#ffffff";
+              ctx.lineWidth = 1.5;
+              ctx.beginPath();
+              ctx.moveTo(x + cellSize / 2, y + 25);
+              ctx.lineTo(x + cellSize / 2, y + cellSize - 25);
+              ctx.stroke();
+            } else if (isExploded) {
+              // Red/Pink Gradient
+              const cellGrad = ctx.createLinearGradient(x, y, x + cellSize, y + cellSize);
+              cellGrad.addColorStop(0, "rgba(255, 0, 85, 0.35)");
+              cellGrad.addColorStop(1, "rgba(220, 38, 38, 0.15)");
+              ctx.fillStyle = cellGrad;
+              ctx.beginPath();
+              ctx.roundRect(x, y, cellSize, cellSize, 14);
+              ctx.fill();
+              ctx.strokeStyle = "#ff0055";
+              ctx.lineWidth = 2;
+              ctx.stroke();
+
+              // Bomb outer body
+              ctx.shadowBlur = 10;
+              ctx.shadowColor = "#ff0055";
+              ctx.fillStyle = "#ffffff";
+              ctx.beginPath();
+              ctx.arc(x + cellSize / 2, y + cellSize / 2, 15, 0, Math.PI * 2);
+              ctx.fill();
+
+              ctx.shadowBlur = 0;
+              ctx.fillStyle = "#ff0055";
+              ctx.beginPath();
+              ctx.arc(x + cellSize / 2, y + cellSize / 2, 12, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Explosion Sparks
+              ctx.strokeStyle = "#ffffff";
+              ctx.lineWidth = 1.5;
+              for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
+                ctx.beginPath();
+                ctx.moveTo(x + cellSize / 2 + Math.cos(angle) * 11, y + cellSize / 2 + Math.sin(angle) * 11);
+                ctx.lineTo(x + cellSize / 2 + Math.cos(angle) * 20, y + cellSize / 2 + Math.sin(angle) * 20);
+                ctx.stroke();
+              }
+            } else if (isMine) {
+              // Faded Mine
+              ctx.fillStyle = "rgba(255, 0, 85, 0.05)";
+              ctx.beginPath();
+              ctx.roundRect(x, y, cellSize, cellSize, 14);
+              ctx.fill();
+              ctx.strokeStyle = "rgba(255, 0, 85, 0.25)";
+              ctx.lineWidth = 1;
+              ctx.stroke();
+
+              ctx.fillStyle = "rgba(255, 0, 85, 0.4)";
+              ctx.beginPath();
+              ctx.arc(x + cellSize / 2, y + cellSize / 2, 11, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          } else {
+            // Unrevealed state
+            const isEnded = gameStatus === "lost" || gameStatus === "cashed-out";
+            ctx.fillStyle = isEnded ? "rgba(13, 14, 26, 0.75)" : "#161729";
+            ctx.beginPath();
+            ctx.roundRect(x, y, cellSize, cellSize, 14);
+            ctx.fill();
+            ctx.strokeStyle = isEnded ? "rgba(255, 255, 255, 0.02)" : "rgba(0, 255, 204, 0.12)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Center status node
+            ctx.fillStyle = isEnded ? "rgba(61, 66, 92, 0.2)" : "#3d425c";
+            ctx.beginPath();
+            ctx.arc(x + cellSize / 2, y + cellSize / 2, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          // Active Replay highlighted border
+          if (isReplayingNext) {
+            ctx.strokeStyle = "#facc15";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.roundRect(x - 2, y - 2, cellSize + 4, cellSize + 4, 16);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // 5. Draw Footer Stats Area
+      const footerY = canvas.height - 120;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
+      ctx.beginPath();
+      ctx.moveTo(25, footerY);
+      ctx.lineTo(canvas.width - 25, footerY);
+      ctx.stroke();
+
+      ctx.fillStyle = "#9ca3af";
+      ctx.font = "11px monospace";
+      ctx.fillText(`BET: $${betAmount.toFixed(2)}`, 30, footerY + 22);
+      ctx.fillText(`MINES: ${minesCount}`, 150, footerY + 22);
+      ctx.fillText(`GEMS: ${revealedCount}`, 260, footerY + 22);
+
+      // Multiplier right side
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 12px sans-serif";
+      ctx.fillText("MULT: ", canvas.width - 110, footerY + 22);
+
+      ctx.fillStyle = "#facc15"; // gold multiplier text
+      ctx.font = "bold 14px monospace";
+      ctx.fillText(`${currentMultiplier.toFixed(2)}x`, canvas.width - 70, footerY + 22);
+
+      // Extra Watermark / Stream Replay metadata
+      ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+      ctx.font = "10px monospace";
+      ctx.fillText("CHALLENGE PLAY • LIVE REPLAY", 30, footerY + 60);
+      ctx.fillText("9:16 HD RECORDING", canvas.width - 135, footerY + 60);
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [isRecording, cells, gameStatus, betAmount, minesCount, currentMultiplier, revealedCount, highlightedIndices]);
 
   // Generate an empty initial grid
   function generateInitialGrid(): Cell[] {
@@ -1063,6 +1353,14 @@ export default function App() {
           <span>Latency: ~2ms</span>
         </div>
       </footer>
+
+      {/* Hidden high-performance recording canvas */}
+      <canvas 
+        ref={canvasRef} 
+        width={450} 
+        height={800} 
+        className="absolute pointer-events-none opacity-0 left-[-9999px] top-[-9999px]" 
+      />
     </div>
   );
 }

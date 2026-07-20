@@ -95,7 +95,7 @@ export const MinesSidebar: React.FC<MinesSidebarProps> = ({
   onReplayClick,
   isReplaying = false,
 }) => {
-  const [activeTab, setActiveTab] = useState<"manual" | "auto" | "audio" | "record">("manual");
+  const [activeTab, setActiveTab] = useState<"manual" | "auto" | "audio">("manual");
   const [autoBetsCount, setAutoBetsCount] = useState<number>(10);
   const [onWinAction, setOnWinAction] = useState<"reset" | "increase">("reset");
   const [onWinPercent, setOnWinPercent] = useState<number>(100);
@@ -157,8 +157,8 @@ export const MinesSidebar: React.FC<MinesSidebarProps> = ({
         </button>
       </div>
 
-      {/* Manual / Auto / Audio / Record Mode Tabs */}
-      <div className="grid grid-cols-4 p-1 bg-brand-bg/80 rounded-xl border border-white/5 gap-0.5 sm:gap-1">
+      {/* Manual / Auto / Audio Mode Tabs */}
+      <div className="grid grid-cols-3 p-1 bg-brand-bg/80 rounded-xl border border-white/5 gap-0.5 sm:gap-1">
         <button
           onClick={() => gameStatus !== "playing" && setActiveTab("manual")}
           disabled={gameStatus === "playing"}
@@ -190,16 +190,6 @@ export const MinesSidebar: React.FC<MinesSidebarProps> = ({
           }`}
         >
           Audio
-        </button>
-        <button
-          onClick={() => setActiveTab("record")}
-          className={`py-2 px-0.5 text-[10px] font-bold rounded-lg transition-all duration-200 flex flex-col items-center justify-center cursor-pointer ${
-            activeTab === "record"
-              ? "bg-[#1a1b31] text-white shadow-md border border-white/5"
-              : "text-gray-400 hover:text-gray-200"
-          }`}
-        >
-          Record
         </button>
       </div>
 
@@ -447,97 +437,86 @@ export const MinesSidebar: React.FC<MinesSidebarProps> = ({
           </motion.div>
         )}
 
-        {/* Screen Recorder controls */}
-        {activeTab === "record" && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col gap-3 p-3 bg-brand-bg/80 rounded-2xl border border-white/5 justify-center relative"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-400 flex items-center gap-1.5">
-                {isRecording ? (
-                  <>
-                    <span className="w-2.5 h-2.5 rounded-full bg-brand-pink animate-ping" />
-                    <span className="text-brand-pink font-bold">RECORDING GAMEPLAY</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="w-2.5 h-2.5 rounded-full bg-gray-600" />
-                    <span>Recorder Standby</span>
-                  </>
-                )}
-              </span>
-              {isRecording && (
-                <span className="font-mono text-xs text-brand-pink bg-brand-pink/10 px-2.5 py-0.5 rounded-full font-bold animate-pulse">
-                  {formatDuration(recordDuration)}
-                </span>
-              )}
-            </div>
+      </div>
 
-            {recordingError && (
-              <div className="text-[10px] text-brand-pink bg-brand-pink/5 border border-brand-pink/10 p-2 rounded-lg mt-1 font-mono leading-tight">
-                {recordingError}
-              </div>
-            )}
+      {/* Standalone Separate Game Recorder Card */}
+      <div className="p-3.5 bg-gradient-to-br from-brand-bg/95 to-[#1c122c]/80 rounded-2xl border border-brand-pink/20 flex flex-col gap-2.5 shadow-md relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-24 h-24 bg-brand-pink/5 rounded-full blur-2xl pointer-events-none" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${isRecording ? "bg-brand-pink animate-ping" : "bg-gray-500"}`} />
+            <span className="text-[10px] uppercase font-bold tracking-wider text-brand-pink font-mono">
+              {isRecording ? "Live Recording" : "9:16 Game Recorder"}
+            </span>
+          </div>
+          {isRecording && (
+            <span className="font-mono text-[10px] text-brand-pink bg-brand-pink/10 px-2 py-0.5 rounded-full font-bold animate-pulse">
+              {formatDuration(recordDuration)}
+            </span>
+          )}
+        </div>
 
-            <div className="flex flex-col gap-2 mt-1">
-              {isRecording ? (
-                <button
-                  onClick={stopScreenRecording}
-                  className="w-full py-2.5 rounded-xl bg-brand-pink hover:bg-brand-pink/85 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-brand-pink/20 cursor-pointer border border-brand-pink/20"
-                >
-                  <Square className="w-3.5 h-3.5 fill-white" />
-                  Stop & Save Video
-                </button>
-              ) : (
-                <button
-                  onClick={startScreenRecording}
-                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-brand-pink hover:from-purple-500 hover:to-brand-pink/85 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-purple-500/10 cursor-pointer border border-white/5"
-                >
-                  <Disc className="w-3.5 h-3.5 text-white animate-pulse" />
-                  Record Game Video
-                </button>
-              )}
-
-              {onReplayClick && (
-                <button
-                  onClick={onReplayClick}
-                  disabled={isReplaying}
-                  className="w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-gray-300 transition-all border border-white/5 flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>Replay Last Bet</span>
-                </button>
-              )}
-            </div>
-
-            {/* Download Action for generated video URL */}
-            <AnimatePresence>
-              {videoUrl && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="mt-2 p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 flex items-center justify-between text-xs"
-                >
-                  <span className="text-emerald-400 font-medium">Video Ready!</span>
-                  <a
-                    href={videoUrl}
-                    download={`mines_win_clip_${Date.now()}.webm`}
-                    className="px-2 py-1 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded transition-colors flex items-center gap-1 cursor-pointer text-[10px]"
-                  >
-                    <Download className="w-3 h-3" />
-                    <span>Download</span>
-                  </a>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
+        {recordingError && (
+          <div className="text-[9px] text-brand-pink bg-brand-pink/5 border border-brand-pink/10 p-2 rounded-lg font-mono leading-tight">
+            {recordingError}
+          </div>
         )}
+
+        <div className="grid grid-cols-2 gap-2">
+          {isRecording ? (
+            <button
+              onClick={stopScreenRecording}
+              className="col-span-2 py-2 rounded-xl bg-brand-pink hover:bg-brand-pink/85 text-white text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shadow-brand-pink/20 cursor-pointer border border-brand-pink/20"
+            >
+              <Square className="w-3 h-3 fill-white" />
+              <span>Stop & Save Clip</span>
+            </button>
+          ) : (
+            <button
+              onClick={startScreenRecording}
+              className="py-2 rounded-xl bg-gradient-to-r from-purple-600 to-brand-pink hover:from-purple-500 hover:to-brand-pink/85 text-white text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shadow-purple-500/10 cursor-pointer border border-white/5"
+            >
+              <Disc className="w-3.5 h-3.5 text-white animate-pulse" />
+              <span>Record Clip</span>
+            </button>
+          )}
+
+          {onReplayClick && !isRecording && (
+            <button
+              onClick={onReplayClick}
+              disabled={isReplaying}
+              className="py-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-[11px] font-bold text-gray-300 transition-all border border-white/5 flex items-center justify-center gap-1 cursor-pointer"
+            >
+              <span>Replay Last</span>
+            </button>
+          )}
+        </div>
+
+        {/* Download Action for generated video URL */}
+        <AnimatePresence>
+          {videoUrl && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="p-1.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20 flex items-center justify-between text-[10px]"
+            >
+              <span className="text-emerald-400 font-semibold">Video Ready!</span>
+              <a
+                href={videoUrl}
+                download={`mines_win_clip_${Date.now()}.webm`}
+                className="px-2 py-0.5 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded transition-colors flex items-center gap-1 cursor-pointer text-[9px]"
+              >
+                <Download className="w-2.5 h-2.5" />
+                <span>Download</span>
+              </a>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Small Bet Summary when not on Manual/Auto tabs */}
-      {(activeTab === "audio" || activeTab === "record") && gameStatus !== "playing" && (
+      {activeTab === "audio" && gameStatus !== "playing" && (
         <div className="text-[10px] text-gray-400 font-mono flex items-center justify-center gap-2 bg-white/5 py-1 px-3 rounded-lg border border-white/5 mt-1">
           <span>Active Bet: <b className="text-brand-cyan">${betAmount.toFixed(2)}</b></span>
           <span className="text-white/15">|</span>
